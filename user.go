@@ -45,9 +45,10 @@ func main() {
 	}
 	defer tcpConn.Close()
 
-	// Perform Handshake
-	tcpConn.Write([]byte("USER/HND"))
-	
+	if !handshake() {
+		return
+	}
+
 	// Start the background network reader
 	go readLoop()
 
@@ -198,6 +199,21 @@ func streamData(sensorID string) {
 			fmt.Println(" [Enter] Voltar ao menu")
 		}
 	}
+}
+
+func handshake() bool {
+	tcpConn.Write([]byte("USER/HND/--"))
+	buf := make([]byte, 1024)
+	n, err := tcpConn.Read(buf)
+	if err != nil {
+		fmt.Println("-!- Erro durante o handshake:", err)
+		return false
+	} else if strings.TrimSpace(string(buf[:n])) != "HND/ACCEPTED" {
+		fmt.Println("-!- Handshake rejeitado pelo servidor.")
+		return false
+	}
+	fmt.Println("-!- Handshake bem-sucedido!")
+	return true
 }
 
 // --- CROSS-PLATFORM CLEAR SCREEN ---

@@ -27,16 +27,16 @@ var (
 		"ANEMO": "A", // Anemometer
 		"FUEL":  "F", // Fuel level
 	}
-	TCP_Types = map[string]string{
-		"USER":  "U", // User message
-		"ACTOR": "C", // Actuator message
+	TCP_Types = []string{
+		"USER",
+		"ACTOR",
 	}
-	Cmd_Types = map[string]string{
-		"HND": "H", // Handshake
-		"BYE": "B", // Disconnect/Exit
-		"LST": "L", // Sensor List request
-		"GET": "G", // Connect to sensor request
-		"DCN": "D", // Disconnect from sensor request
+	Cmd_Types = []string{
+		"HND", // Handshake
+		"BYE", // Disconnect/Exit
+		"LST", // Sensor List request
+		"GET", // Connect to sensor request
+		"DCN", // Disconnect from sensor request
 	}
 )
 
@@ -196,11 +196,27 @@ func handleClient(conn net.Conn) {
 		cmdType := parts[1]
 		content := parts[2]
 
-		if _, exists := TCP_Types[msgType]; !exists {
+		msgTypeValid := false
+		for _, t := range TCP_Types {
+			if t == msgType {
+				msgTypeValid = true
+				break
+			}
+		}
+		if !msgTypeValid {
 			output(fmt.Sprintf("-!- Unknown message type from %s: %s", conn.RemoteAddr(), msgType))
 			conn.Write([]byte(fmt.Sprintf("ERR/Unknown message type: %s", msgType)))
 			continue
-		} else if _, exists := Cmd_Types[cmdType]; !exists {
+		}
+
+		cmdTypeValid := false
+		for _, t := range Cmd_Types {
+			if t == cmdType {
+				cmdTypeValid = true
+				break
+			}
+		}
+		if !cmdTypeValid {
 			output(fmt.Sprintf("-!- Unknown command type from %s: %s", conn.RemoteAddr(), cmdType))
 			conn.Write([]byte(fmt.Sprintf("ERR/Unknown command type: %s", cmdType)))
 			continue
