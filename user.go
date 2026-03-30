@@ -82,7 +82,7 @@ func main() {
 				actorControl(actorID)
 			}
 		} else if input == "Q" {
-			tcpConn.Write([]byte("USER/BYE/--"))
+			tcpConn.Write([]byte("USER/BYE/--\n"))
 			clearScreen()
 			fmt.Println("Desconectado. Adeus!")
 			os.Exit(0)
@@ -92,17 +92,11 @@ func main() {
 
 // --- BACKGROUND NETWORK LISTENER ---
 func readLoop() {
-	buf := make([]byte, 1024)
-	for {
-		n, err := tcpConn.Read(buf)
-		if err != nil {
-			fmt.Println("\n-!- Desconectado do servidor.")
-			os.Exit(1)
-		}
+	netScanner := bufio.NewScanner(tcpConn)
+	
+	for netScanner.Scan() {
+		msg := strings.TrimSpace(netScanner.Text())
 
-		msg := strings.TrimSpace(string(buf[:n]))
-
-		// Update state safely
 		if strings.HasPrefix(msg, "LST/") {
 			listLock.Lock()
 			if msg == "LST/" {
@@ -127,7 +121,6 @@ func readLoop() {
 			dataLock.Unlock()
 
 		} else if strings.HasPrefix(msg, "CKS/") {
-			// Expected: CKS/actorIP/ON
 			parts := strings.Split(msg, "/")
 			if len(parts) == 3 {
 				dataLock.Lock()
@@ -136,12 +129,15 @@ func readLoop() {
 			}
 		}
 	}
+	
+	fmt.Println("\n-!- Desconectado do servidor.")
+	os.Exit(1)
 }
 
 // --- SCREEN 1A: SENSOR LIST ---
 func showSensorMenu() string {
 	for {
-		tcpConn.Write([]byte("USER/LST/--"))
+		tcpConn.Write([]byte("USER/LST/--\n"))
 		time.Sleep(200 * time.Millisecond)
 
 		clearScreen()
@@ -188,7 +184,7 @@ func showSensorMenu() string {
 // --- SCREEN 1B: ACTOR LIST ---
 func showActorMenu() string {
 	for {
-		tcpConn.Write([]byte("USER/LSA/--"))
+		tcpConn.Write([]byte("USER/LSA/--\n"))
 		time.Sleep(200 * time.Millisecond)
 
 		clearScreen()
@@ -234,7 +230,7 @@ func showActorMenu() string {
 
 // --- SCREEN 2A: SENSOR LIVE STREAM ---
 func streamData(sensorID string) {
-	tcpConn.Write([]byte("USER/GET/" + sensorID))
+	tcpConn.Write([]byte("USER/GET/" + sensorID + "\n"))
 	
 	dataLock.Lock()
 	latestData = "CONECTANDO..."
@@ -252,7 +248,7 @@ func streamData(sensorID string) {
 	for {
 		select {
 		case <-stopChan:
-			tcpConn.Write([]byte("USER/DCN/--"))
+			tcpConn.Write([]byte("USER/DCN/--\n"))
 			return 
 
 		case <-ticker.C:
@@ -281,9 +277,8 @@ func streamData(sensorID string) {
 // --- SCREEN 2B: ACTOR CONTROL PANEL ---
 func actorControl(actorID string) {
 	for {
-		// Ask the server for the current state
-		tcpConn.Write([]byte("USER/CKS/" + actorID))
-		time.Sleep(200 * time.Millisecond) // Wait for server to fetch state
+		tcpConn.Write([]byte("USER/CKS/" + actorID + "\n"))
+		time.Sleep(200 * time.Millisecond) 
 
 		clearScreen()
 		fmt.Println("======================================")
@@ -306,32 +301,33 @@ func actorControl(actorID string) {
 		input := strings.TrimSpace(strings.ToUpper(scanner.Text()))
 
 		if input == "1" {
-			// The pipe '|' acts as a delimiter so the server knows which command to route
-			tcpConn.Write([]byte("USER/SST/" + actorID + "|ON"))
+			tcpConn.Write([]byte("USER/SST/" + actorID + "|ON\n"))
 			time.Sleep(200 * time.Millisecond) 
 		} else if input == "2" {
-			tcpConn.Write([]byte("USER/SST/" + actorID + "|OFF"))
+			tcpConn.Write([]byte("USER/SST/" + actorID + "|OFF\n"))
 			time.Sleep(200 * time.Millisecond)
 		} else if input == "B" {
 			return
 		}
-		// If 'R' or empty, the loop just restarts and fetches the new state!
 	}
 }
 
 func handshake() bool {
-	tcpConn.Write([]byte("USER/HND/--"))
-	buf := make([]byte, 1024)
-	n, err := tcpConn.Read(buf)
-	if err != nil {
-		fmt.Println("-!- Erro durante o handshake:", err)
-		return false
-	} else if strings.TrimSpace(string(buf[:n])) != "HND/ACCEPTED" {
-		fmt.Println("-!- Handshake rejeitado pelo servidor.")
-		return false
+	tcpConn.Write([]byte("USER/HND/--\n"))
+	
+	netScanner := bufio.NewScanner(tcpConn)
+	if netScanner.Scan() {
+		msg := strings.TrimSpace(netScanner.Text())
+		if msg != "HND/ACCEPTED" {
+			fmt.Println("-!- Handshake rejeitado pelo servidor.")
+			return false
+		}
+		fmt.Println("-!- Handshake bem-sucedido!")
+		return true
 	}
-	fmt.Println("-!- Handshake bem-sucedido!")
-	return true
+	
+	fmt.Println("-!- Erro durante o handshake: servidor fechou a conexão.")
+	return false
 }
 
 // --- CROSS-PLATFORM CLEAR SCREEN ---

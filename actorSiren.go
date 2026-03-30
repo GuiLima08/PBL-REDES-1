@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 	"os"
@@ -38,15 +39,10 @@ func main() {
 }
 
 func readLoop() {
-	buf := make([]byte, 1024)
-	for {
-		n, err := tcpConn.Read(buf)
-		if err != nil {
-			fmt.Println("\n-!- Erro ao ler do servidor:", err)
-			return
-		}
+	scanner := bufio.NewScanner(tcpConn)
 
-		msg := strings.TrimSpace(string(buf[:n]))
+	for scanner.Scan() {
+		msg := strings.TrimSpace(scanner.Text())
 
 		switch msg {
 		case "ON":
@@ -69,27 +65,33 @@ func readLoop() {
 		default:
 			fmt.Printf("-!- Mensagem desconhecida do servidor: %s\n", msg)
 		}
-
+	}
+	
+	if err := scanner.Err(); err != nil {
+		fmt.Println("\n-!- Erro ao ler do servidor:", err)
 	}
 }
 
 func handshake() bool {
-	_, err := tcpConn.Write([]byte("ACTOR/HND/--"))
+	_, err := tcpConn.Write([]byte("ACTOR/HND/--\n"))
 	if err != nil {
 		fmt.Println("-!- Erro ao enviar handshake: ", err)
 		return false
 	}
-	buf := make([]byte, 1024)
-	n, err := tcpConn.Read(buf)
-	if err != nil {
-		fmt.Println("-!- Erro durante o handshake:", err)
-		return false
-	} else if strings.TrimSpace(string(buf[:n])) != "HND/ACCEPTED" {
-		fmt.Println("-!- Handshake rejeitado pelo servidor.")
-		return false
+	
+	scanner := bufio.NewScanner(tcpConn)
+	if scanner.Scan() {
+		msg := strings.TrimSpace(scanner.Text())
+		if msg != "HND/ACCEPTED" {
+			fmt.Println("-!- Handshake rejeitado pelo servidor.")
+			return false
+		}
+		fmt.Println("-!- Handshake bem-sucedido!")
+		return true
 	}
-	fmt.Println("-!- Handshake bem-sucedido!")
-	return true
+	
+	fmt.Println("-!- Erro durante o handshake: servidor fechou a conexão.")
+	return false
 }
 
 func pulse() {
@@ -97,9 +99,8 @@ func pulse() {
 	fmt.Println("Estado: ", state)
 }
 
-// --- NEW: Sends standard 3-part message (TYPE/COMMAND/CONTENT) ---
 func feedback() {
-	msg := fmt.Sprintf("ACTOR/FDB/%s", state)
+	msg := fmt.Sprintf("ACTOR/FDB/%s\n", state)
 	_, err := tcpConn.Write([]byte(msg))
 	if err != nil {
 		fmt.Println("-!- Erro ao enviar feedback: ", err)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 	"os"
@@ -46,7 +47,7 @@ var (
 		"LSA", 
 		"CKS", 
 		"SST", 
-		"FDB", // --- NEW: Feedback command for Actors ---
+		"FDB", 
 	}
 )
 
@@ -201,17 +202,13 @@ func handleClient(conn net.Conn) {
 		conn.Close()
 	}()
 	go sensorBridge(conn)
-	buf := make([]byte, 1024)
-	for {
-		n, err := conn.Read(buf)
-		if err != nil {
-			return
-		}
-		msg := strings.TrimSpace(string(buf[:n]))
+	
+	// --- MÁGICA DO SCANNER AQUI ---
+	scanner := bufio.NewScanner(conn)
+	
+	for scanner.Scan() {
+		msg := strings.TrimSpace(scanner.Text())
 		parts := strings.Split(msg, "/")
-
-		// --- INTERCEPTOR REMOVED ---
-		// We now rely purely on the standard 3-part check below!
 
 		if len(parts) != 3 {
 			output(fmt.Sprintf("-!- Invalid message format from %s: %s", conn.RemoteAddr(), msg))
@@ -230,7 +227,7 @@ func handleClient(conn net.Conn) {
 		}
 		if !msgTypeValid {
 			output(fmt.Sprintf("-!- Unknown message type from %s: %s", conn.RemoteAddr(), msgType))
-			conn.Write([]byte(fmt.Sprintf("ERR/Unknown message type: %s", msgType)))
+			conn.Write([]byte(fmt.Sprintf("ERR/Unknown message type: %s\n", msgType)))
 			continue
 		}
 
@@ -243,7 +240,7 @@ func handleClient(conn net.Conn) {
 		}
 		if !cmdTypeValid {
 			output(fmt.Sprintf("-!- Unknown command type from %s: %s", conn.RemoteAddr(), cmdType))
-			conn.Write([]byte(fmt.Sprintf("ERR/Unknown command type: %s", cmdType)))
+			conn.Write([]byte(fmt.Sprintf("ERR/Unknown command type: %s\n", cmdType)))
 			continue
 		}
 
@@ -265,8 +262,7 @@ func handleUser(conn net.Conn, cmdType, content string) {
 		TLock.Lock()
 		Clients[conn.RemoteAddr().String()] = conn
 		TLock.Unlock()
-		response := fmt.Sprint("HND/ACCEPTED")
-		conn.Write([]byte(response))
+		conn.Write([]byte("HND/ACCEPTED\n"))
 		break
 
 	case "LST":
@@ -276,7 +272,7 @@ func handleUser(conn net.Conn, cmdType, content string) {
 			sensorList = append(sensorList, id)
 		}
 		Lock.RUnlock()
-		response := fmt.Sprint("LST/", strings.Join(sensorList, ","))
+		response := fmt.Sprintf("LST/%s\n", strings.Join(sensorList, ","))
 		conn.Write([]byte(response))
 		break
 
@@ -286,7 +282,7 @@ func handleUser(conn net.Conn, cmdType, content string) {
 		sensor, exists := Sensors[content]
 		Lock.RUnlock()
 		if !exists {
-			conn.Write([]byte(fmt.Sprintf("ERR/Sensor \"%s\" not found", content)))
+			conn.Write([]byte(fmt.Sprintf("ERR/Sensor \"%s\" not found\n", content)))
 			output(fmt.Sprintf("-!- Sensor \"%s\" requested by %s (USER) not found", content, conn.RemoteAddr()))
 			return
 		}
@@ -310,7 +306,7 @@ func handleUser(conn net.Conn, cmdType, content string) {
 			actorList = append(actorList, id)
 		}
 		ALock.RUnlock()
-		response := fmt.Sprint("LSA/", strings.Join(actorList, ","))
+		response := fmt.Sprintf("LSA/%s\n", strings.Join(actorList, ","))
 		conn.Write([]byte(response))
 		break
 
@@ -322,12 +318,12 @@ func handleUser(conn net.Conn, cmdType, content string) {
 		ALock.RUnlock()
 
 		if !exists || !actorExists {
-			conn.Write([]byte(fmt.Sprintf("ERR/Actor \"%s\" not found", actorId)))
+			conn.Write([]byte(fmt.Sprintf("ERR/Actor \"%s\" not found\n", actorId)))
 			return
 		}
 		
-		actorConn.Write([]byte("FEEDBACK"))
-		conn.Write([]byte(fmt.Sprintf("CKS/%s/%s", actorId, state)))
+		actorConn.Write([]byte("FEEDBACK\n"))
+		conn.Write([]byte(fmt.Sprintf("CKS/%s/%s\n", actorId, state)))
 		break
 
 	case "SST":
@@ -342,10 +338,10 @@ func handleUser(conn net.Conn, cmdType, content string) {
 		ALock.RUnlock()
 
 		if !exists {
-			conn.Write([]byte(fmt.Sprintf("ERR/Actor \"%s\" not found", actorId)))
+			conn.Write([]byte(fmt.Sprintf("ERR/Actor \"%s\" not found\n", actorId)))
 			return
 		}
-		actorConn.Write([]byte(newState))
+		actorConn.Write([]byte(newState + "\n"))
 		output(fmt.Sprintf("Forwarded %s command to actor %s", newState, actorId))
 		break
 
@@ -365,13 +361,11 @@ func handleActor(conn net.Conn, cmdType, content string) {
 		ActorStates[conn.RemoteAddr().String()] = "UNKNOWN"
 		ALock.Unlock()
 		
-		response := fmt.Sprint("HND/ACCEPTED")
-		conn.Write([]byte(response))
+		conn.Write([]byte("HND/ACCEPTED\n"))
 		
 		time.Sleep(100 * time.Millisecond)
-		conn.Write([]byte("FEEDBACK"))
+		conn.Write([]byte("FEEDBACK\n"))
 
-	// --- NEW: Handle the standardized feedback messages cleanly! ---
 	case "FDB":
 		ALock.Lock()
 		ActorStates[conn.RemoteAddr().String()] = content
@@ -401,7 +395,7 @@ func sensorBridge(conn net.Conn) {
 			sensor := Sensors[sensorId]
 			Lock.RUnlock()
 
-			response := fmt.Sprintf("DATA/%s/%.2f", sensor.Type, sensor.Value)
+			response := fmt.Sprintf("DATA/%s/%.2f\n", sensor.Type, sensor.Value)
 			_, err := conn.Write([]byte(response))
 			if err != nil {
 				return
