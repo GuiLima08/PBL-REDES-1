@@ -19,7 +19,10 @@ var (
 	
 	// App State
 	sensorList   []string
+	actorList    []string
 	latestData   string
+	actorState   string // Holds the fetched state of the current actor
+
 	listLock     sync.RWMutex
 	dataLock     sync.RWMutex
 	dataTypes	 = map[string][2]string{
@@ -27,7 +30,6 @@ var (
 		"FUEL":  {"Combustível", "L"},
 	}
 )
-
 
 func main() {
 	if len(os.Args) != 3 {
@@ -55,13 +57,36 @@ func main() {
 	// Initialize the keyboard scanner
 	scanner = bufio.NewScanner(os.Stdin)
 
-	// --- MAIN APP LOOP ---
+	// --- THE MOTHER MENU LOOP ---
 	for {
-		// 1. Show Menu & Get Choice
-		selectedSensor := showMenu()
-		
-		// 2. Stream Data (Blocks until user presses Enter)
-		streamData(selectedSensor)
+		clearScreen()
+		fmt.Println("======================================")
+		fmt.Println("       PAINEL DE CONTROLE CENTRAL")
+		fmt.Println("======================================")
+		fmt.Println(" [1] Monitorar Sensores")
+		fmt.Println(" [2] Gerenciar Atuadores")
+		fmt.Println(" [Q] Sair")
+		fmt.Print("\n Selecione uma opção: ")
+
+		scanner.Scan()
+		input := strings.TrimSpace(strings.ToUpper(scanner.Text()))
+
+		if input == "1" {
+			sensorID := showSensorMenu()
+			if sensorID != "" {
+				streamData(sensorID)
+			}
+		} else if input == "2" {
+			actorID := showActorMenu()
+			if actorID != "" {
+				actorControl(actorID)
+			}
+		} else if input == "Q" {
+			tcpConn.Write([]byte("USER/BYE/--"))
+			clearScreen()
+			fmt.Println("Desconectado. Adeus!")
+			os.Exit(0)
+		}
 	}
 }
 
@@ -86,24 +111,42 @@ func readLoop() {
 				sensorList = strings.Split(strings.TrimPrefix(msg, "LST/"), ",")
 			}
 			listLock.Unlock()
+
+		} else if strings.HasPrefix(msg, "LSA/") {
+			listLock.Lock()
+			if msg == "LSA/" {
+				actorList = []string{}
+			} else {
+				actorList = strings.Split(strings.TrimPrefix(msg, "LSA/"), ",")
+			}
+			listLock.Unlock()
+
 		} else if strings.HasPrefix(msg, "DATA/") {
 			dataLock.Lock()
 			latestData = strings.TrimPrefix(msg, "DATA/")
 			dataLock.Unlock()
+
+		} else if strings.HasPrefix(msg, "CKS/") {
+			// Expected: CKS/actorIP/ON
+			parts := strings.Split(msg, "/")
+			if len(parts) == 3 {
+				dataLock.Lock()
+				actorState = parts[2]
+				dataLock.Unlock()
+			}
 		}
 	}
 }
 
-// --- SCREEN 1: THE MENU ---
-func showMenu() string {
+// --- SCREEN 1A: SENSOR LIST ---
+func showSensorMenu() string {
 	for {
-		// Ask the server for the latest list
 		tcpConn.Write([]byte("USER/LST/--"))
-		time.Sleep(200 * time.Millisecond) // Give the background loop a moment to receive it
+		time.Sleep(200 * time.Millisecond)
 
 		clearScreen()
 		fmt.Println("======================================")
-		fmt.Println("       MONITOR DE AERONAVE")
+		fmt.Println("       MONITOR DE SENSORES")
 		fmt.Println("======================================")
 
 		listLock.RLock()
@@ -112,7 +155,7 @@ func showMenu() string {
 		listLock.RUnlock()
 
 		if len(sensors) == 0 {
-			fmt.Println("\n Nenhum sensor encontrado. Tente atualizar a lista.")
+			fmt.Println("\n Nenhum sensor encontrado.")
 		} else {
 			fmt.Println("\n SENSORES DISPONÍVEIS:")
 			for i, s := range sensors {
@@ -122,25 +165,19 @@ func showMenu() string {
 
 		fmt.Println("\n--------------------------------------")
 		fmt.Println(" [R] Atualizar lista")
-		fmt.Println(" [Q] Sair")
+		fmt.Println(" [B] Voltar ao Menu Principal")
 		fmt.Print("\n Selecione uma opção: ")
 
-		// Wait for user input
 		scanner.Scan()
 		input := strings.TrimSpace(strings.ToUpper(scanner.Text()))
 
-		// Handle Special Commands
-		if input == "Q" {
-			tcpConn.Write([]byte("USER/BYE/--")) // Graceful disconnect
-			clearScreen()
-			fmt.Println("Desconectado. Adeus!")
-			os.Exit(0)
+		if input == "B" {
+			return ""
 		}
 		if input == "R" || input == "" {
-			continue // Loop restarts and redraws the menu
+			continue
 		}
 
-		// Handle Number Selection
 		choice, err := strconv.Atoi(input)
 		if err == nil && choice > 0 && choice <= len(sensors) {
 			return sensors[choice-1]
@@ -148,36 +185,77 @@ func showMenu() string {
 	}
 }
 
-// --- SCREEN 2: THE LIVE STREAM ---
+// --- SCREEN 1B: ACTOR LIST ---
+func showActorMenu() string {
+	for {
+		tcpConn.Write([]byte("USER/LSA/--"))
+		time.Sleep(200 * time.Millisecond)
+
+		clearScreen()
+		fmt.Println("======================================")
+		fmt.Println("       GERENCIADOR DE ATUADORES")
+		fmt.Println("======================================")
+
+		listLock.RLock()
+		actors := make([]string, len(actorList))
+		copy(actors, actorList)
+		listLock.RUnlock()
+
+		if len(actors) == 0 {
+			fmt.Println("\n Nenhum atuador encontrado.")
+		} else {
+			fmt.Println("\n ATUADORES DISPONÍVEIS:")
+			for i, a := range actors {
+				fmt.Printf("  [%d] %s\n", i+1, a)
+			}
+		}
+
+		fmt.Println("\n--------------------------------------")
+		fmt.Println(" [R] Atualizar lista")
+		fmt.Println(" [B] Voltar ao Menu Principal")
+		fmt.Print("\n Selecione uma opção: ")
+
+		scanner.Scan()
+		input := strings.TrimSpace(strings.ToUpper(scanner.Text()))
+
+		if input == "B" {
+			return ""
+		}
+		if input == "R" || input == "" {
+			continue
+		}
+
+		choice, err := strconv.Atoi(input)
+		if err == nil && choice > 0 && choice <= len(actors) {
+			return actors[choice-1]
+		}
+	}
+}
+
+// --- SCREEN 2A: SENSOR LIVE STREAM ---
 func streamData(sensorID string) {
-	// Request connection
 	tcpConn.Write([]byte("USER/GET/" + sensorID))
 	
-	// Reset the display data
 	dataLock.Lock()
 	latestData = "CONECTANDO..."
 	dataLock.Unlock()
 
-	// Setup an asynchronous listener for the "Enter" key
 	stopChan := make(chan bool)
 	go func() {
-		scanner.Scan() // This blocks until the user presses Enter
+		scanner.Scan()
 		stopChan <- true
 	}()
 
-	// Setup a ticker to redraw the screen every 500ms
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-stopChan:
-			// User pressed Enter! Send the Disconnect command and exit the loop.
 			tcpConn.Write([]byte("USER/DCN/--"))
 			return 
 
 		case <-ticker.C:
-			// Time to redraw the screen
 			dataLock.RLock()
 			data := latestData
 			dataLock.RUnlock()
@@ -187,7 +265,6 @@ func streamData(sensorID string) {
 			fmt.Printf("SENSOR: \"%s\" (%s)\n", sensorID, dataTypes[sensorID][0])
 			fmt.Println("======================================")
 			
-			// Format the DATA/A/15.5 string to look nice
 			parts := strings.Split(data, "/")
 			if len(parts) == 2 {
 				fmt.Printf("    %s%s\n", parts[1], dataTypes[sensorID][1])
@@ -198,6 +275,47 @@ func streamData(sensorID string) {
 			fmt.Println("\n======================================")
 			fmt.Println(" [Enter] Voltar ao menu")
 		}
+	}
+}
+
+// --- SCREEN 2B: ACTOR CONTROL PANEL ---
+func actorControl(actorID string) {
+	for {
+		// Ask the server for the current state
+		tcpConn.Write([]byte("USER/CKS/" + actorID))
+		time.Sleep(200 * time.Millisecond) // Wait for server to fetch state
+
+		clearScreen()
+		fmt.Println("======================================")
+		fmt.Printf(" ATUADOR: %s\n", actorID)
+		
+		dataLock.RLock()
+		st := actorState
+		dataLock.RUnlock()
+		
+		fmt.Printf(" ESTADO ATUAL: %s\n", st)
+		fmt.Println("======================================")
+		fmt.Println(" [1] Ligar (ON)")
+		fmt.Println(" [2] Desligar (OFF)")
+		fmt.Println("--------------------------------------")
+		fmt.Println(" [R] Atualizar Estado")
+		fmt.Println(" [B] Voltar")
+		fmt.Print("\n Selecione uma opção: ")
+
+		scanner.Scan()
+		input := strings.TrimSpace(strings.ToUpper(scanner.Text()))
+
+		if input == "1" {
+			// The pipe '|' acts as a delimiter so the server knows which command to route
+			tcpConn.Write([]byte("USER/SST/" + actorID + "|ON"))
+			time.Sleep(200 * time.Millisecond) 
+		} else if input == "2" {
+			tcpConn.Write([]byte("USER/SST/" + actorID + "|OFF"))
+			time.Sleep(200 * time.Millisecond)
+		} else if input == "B" {
+			return
+		}
+		// If 'R' or empty, the loop just restarts and fetches the new state!
 	}
 }
 

@@ -9,10 +9,9 @@ import (
 )
 
 var (
-	tcpConn    net.Conn
-	state      string = "OFF"
+	tcpConn net.Conn
+	state   string = "OFF"
 )
-
 
 func main() {
 	if len(os.Args) != 3 {
@@ -34,12 +33,10 @@ func main() {
 		return
 	}
 
-	// Start the background network reader
 	readLoop()
 	fmt.Println("\n-!- Desconectado do servidor.")
 }
 
-// --- BACKGROUND NETWORK LISTENER ---
 func readLoop() {
 	buf := make([]byte, 1024)
 	for {
@@ -64,7 +61,7 @@ func readLoop() {
 
 		case "FEEDBACK":
 			feedback()
-		
+
 		case "BYE":
 			fmt.Println("\n-!- O servidor solicitou a desconexão.")
 			return
@@ -72,7 +69,7 @@ func readLoop() {
 		default:
 			fmt.Printf("-!- Mensagem desconhecida do servidor: %s\n", msg)
 		}
-		
+
 	}
 }
 
@@ -96,12 +93,13 @@ func handshake() bool {
 }
 
 func pulse() {
-	time.Sleep(1*time.Second)
+	time.Sleep(1 * time.Second)
 	fmt.Println("Estado: ", state)
 }
 
+// --- NEW: Sends standard 3-part message (TYPE/COMMAND/CONTENT) ---
 func feedback() {
-	msg := fmt.Sprintf("SIREN/%s", state)
+	msg := fmt.Sprintf("ACTOR/FDB/%s", state)
 	_, err := tcpConn.Write([]byte(msg))
 	if err != nil {
 		fmt.Println("-!- Erro ao enviar feedback: ", err)

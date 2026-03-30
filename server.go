@@ -18,25 +18,35 @@ type SensorData struct {
 }
 
 var (
-	Sensors   = make(map[string]SensorData)
-	Clients   = make(map[string]net.Conn)
-	Bridges   = make(map[string]string)
-	Lock      = sync.RWMutex{}
-	TLock     = sync.RWMutex{} // Separate lock for TCP Bridges
+	Sensors     = make(map[string]SensorData)
+	Clients     = make(map[string]net.Conn)
+	Bridges     = make(map[string]string)
+	
+	Actors      = make(map[string]net.Conn)
+	ActorStates = make(map[string]string)
+	ALock       = sync.RWMutex{}
+	
+	Lock        = sync.RWMutex{}
+	TLock       = sync.RWMutex{} 
+	
 	UDP_Types = map[string]string{
-		"ANEMO": "A", // Anemometer
-		"FUEL":  "F", // Fuel level
+		"ANEMO": "A", 
+		"FUEL":  "F", 
 	}
 	TCP_Types = []string{
 		"USER",
 		"ACTOR",
 	}
 	Cmd_Types = []string{
-		"HND", // Handshake
-		"BYE", // Disconnect/Exit
-		"LST", // Sensor List request
-		"GET", // Connect to sensor request
-		"DCN", // Disconnect from sensor request
+		"HND", 
+		"BYE", 
+		"LST", 
+		"GET", 
+		"DCN", 
+		"LSA", 
+		"CKS", 
+		"SST", 
+		"FDB", // --- NEW: Feedback command for Actors ---
 	}
 )
 
@@ -177,6 +187,17 @@ func handleTCP(port string) {
 func handleClient(conn net.Conn) {
 	defer func() {
 		output(fmt.Sprintf("TCP client from %s disconnected", conn.RemoteAddr()))
+		
+		ALock.Lock()
+		delete(Actors, conn.RemoteAddr().String())
+		delete(ActorStates, conn.RemoteAddr().String())
+		ALock.Unlock()
+
+		TLock.Lock()
+		delete(Clients, conn.RemoteAddr().String())
+		delete(Bridges, conn.RemoteAddr().String())
+		TLock.Unlock()
+
 		conn.Close()
 	}()
 	go sensorBridge(conn)
@@ -188,6 +209,10 @@ func handleClient(conn net.Conn) {
 		}
 		msg := strings.TrimSpace(string(buf[:n]))
 		parts := strings.Split(msg, "/")
+
+		// --- INTERCEPTOR REMOVED ---
+		// We now rely purely on the standard 3-part check below!
+
 		if len(parts) != 3 {
 			output(fmt.Sprintf("-!- Invalid message format from %s: %s", conn.RemoteAddr(), msg))
 			continue
@@ -245,7 +270,6 @@ func handleUser(conn net.Conn, cmdType, content string) {
 		break
 
 	case "LST":
-		output(fmt.Sprintf("Sensor list requested by %s (USER)", conn.RemoteAddr()))
 		Lock.RLock()
 		var sensorList []string
 		for id := range Sensors {
@@ -270,7 +294,6 @@ func handleUser(conn net.Conn, cmdType, content string) {
 		break
 
 	case "DCN":
-		output(fmt.Sprintf("Sensor disconnection requested by %s (USER)", conn.RemoteAddr()))
 		TLock.Lock()
 		delete(Bridges, conn.RemoteAddr().String())
 		TLock.Unlock()
@@ -278,11 +301,52 @@ func handleUser(conn net.Conn, cmdType, content string) {
 
 	case "BYE":
 		output(fmt.Sprintf("Disconnect requested by %s (USER)", conn.RemoteAddr()))
-		TLock.Lock()
-		delete(Clients, conn.RemoteAddr().String())
-		delete(Bridges, conn.RemoteAddr().String())
-		TLock.Unlock()
-		conn.Close()
+		break
+
+	case "LSA":
+		ALock.RLock()
+		var actorList []string
+		for id := range Actors {
+			actorList = append(actorList, id)
+		}
+		ALock.RUnlock()
+		response := fmt.Sprint("LSA/", strings.Join(actorList, ","))
+		conn.Write([]byte(response))
+		break
+
+	case "CKS":
+		actorId := content
+		ALock.RLock()
+		state, exists := ActorStates[actorId]
+		actorConn, actorExists := Actors[actorId]
+		ALock.RUnlock()
+
+		if !exists || !actorExists {
+			conn.Write([]byte(fmt.Sprintf("ERR/Actor \"%s\" not found", actorId)))
+			return
+		}
+		
+		actorConn.Write([]byte("FEEDBACK"))
+		conn.Write([]byte(fmt.Sprintf("CKS/%s/%s", actorId, state)))
+		break
+
+	case "SST":
+		subparts := strings.Split(content, "|")
+		if len(subparts) != 2 {
+			return
+		}
+		actorId, newState := subparts[0], subparts[1]
+
+		ALock.RLock()
+		actorConn, exists := Actors[actorId]
+		ALock.RUnlock()
+
+		if !exists {
+			conn.Write([]byte(fmt.Sprintf("ERR/Actor \"%s\" not found", actorId)))
+			return
+		}
+		actorConn.Write([]byte(newState))
+		output(fmt.Sprintf("Forwarded %s command to actor %s", newState, actorId))
 		break
 
 	default:
@@ -295,12 +359,24 @@ func handleActor(conn net.Conn, cmdType, content string) {
 	switch cmdType {
 	case "HND":
 		output(fmt.Sprintf("Handshake received from %s (ACTOR)", conn.RemoteAddr()))
-		Clients[conn.RemoteAddr().String()] = conn
+		
+		ALock.Lock()
+		Actors[conn.RemoteAddr().String()] = conn
+		ActorStates[conn.RemoteAddr().String()] = "UNKNOWN"
+		ALock.Unlock()
+		
 		response := fmt.Sprint("HND/ACCEPTED")
-		_, err := conn.Write([]byte(response))
-		if err != nil {
-			output(fmt.Sprintf("-!- Error sending handshake response to %s (ACTOR): %v", conn.RemoteAddr(), err))
-		}
+		conn.Write([]byte(response))
+		
+		time.Sleep(100 * time.Millisecond)
+		conn.Write([]byte("FEEDBACK"))
+
+	// --- NEW: Handle the standardized feedback messages cleanly! ---
+	case "FDB":
+		ALock.Lock()
+		ActorStates[conn.RemoteAddr().String()] = content
+		ALock.Unlock()
+		output(fmt.Sprintf("Actor %s updated state to: %s", conn.RemoteAddr(), content))
 
 	default:
 		output(fmt.Sprintf("-!- Unhandled command type from %s (ACTOR): %s", conn.RemoteAddr(), cmdType))
@@ -308,7 +384,6 @@ func handleActor(conn net.Conn, cmdType, content string) {
 }
 
 func sensorBridge(conn net.Conn) {
-	output(fmt.Sprintf("Starting sensor bridge for \"%s\"", conn.RemoteAddr()))
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 	user := conn.RemoteAddr().String()
@@ -329,12 +404,10 @@ func sensorBridge(conn net.Conn) {
 			response := fmt.Sprintf("DATA/%s/%.2f", sensor.Type, sensor.Value)
 			_, err := conn.Write([]byte(response))
 			if err != nil {
-				output(fmt.Sprintf("-!- Error sending data to %s for sensor \"%s\": %v", conn.RemoteAddr(), sensorId, err))
 				return
 			}
 		}
 	}
-
 }
 
 func updateBridge(conn net.Conn, sensor SensorData) {
