@@ -297,7 +297,11 @@ func handleActor(conn net.Conn, cmdType, content string) {
 		output(fmt.Sprintf("Handshake received from %s (ACTOR)", conn.RemoteAddr()))
 		Clients[conn.RemoteAddr().String()] = conn
 		response := fmt.Sprint("HND/ACCEPTED")
-		conn.Write([]byte(response))
+		_, err := conn.Write([]byte(response))
+		if err != nil {
+			output(fmt.Sprintf("-!- Error sending handshake response to %s (ACTOR): %v", conn.RemoteAddr(), err))
+		}
+
 	default:
 		output(fmt.Sprintf("-!- Unhandled command type from %s (ACTOR): %s", conn.RemoteAddr(), cmdType))
 	}
