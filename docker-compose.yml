@@ -8,7 +8,8 @@ services:
       dockerfile: Dockerfile.server
     command: ["8080"] 
     ports:
-      - "8080:8080/udp"
+      - "8080:8080/tcp" # Libera o TCP para o seu user.go se conectar de fora
+      - "8080:8080/udp" # Libera o UDP
     networks:
       - flight-net
 
@@ -23,7 +24,7 @@ services:
     networks:
       - flight-net
 
-  # 2. The Sensors (Both attach to the Network Holder)
+  # 2. Sensores e Atuadores (Todos anexados ao Network Holder)
   anemo-ac1:
     build:
       context: .
@@ -38,6 +39,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.fuel
+    command: ["server", "8080"]
+    network_mode: "service:ac1-network"
+    depends_on:
+      - server
+      - ac1-network
+
+  siren-ac1:
+    build:
+      context: .
+      dockerfile: Dockerfile.siren
     command: ["server", "8080"]
     network_mode: "service:ac1-network"
     depends_on:
@@ -68,6 +79,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.fuel
+    command: ["server", "8080"]
+    network_mode: "service:ac2-network"
+    depends_on:
+      - server
+      - ac2-network
+
+  siren-ac2:
+    build:
+      context: .
+      dockerfile: Dockerfile.siren
     command: ["server", "8080"]
     network_mode: "service:ac2-network"
     depends_on:
