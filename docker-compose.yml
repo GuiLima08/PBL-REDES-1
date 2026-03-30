@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  # --- CENTRAL SERVER ---
+  server:
+    build: 
+      context: .
+      dockerfile: Dockerfile.server
+    command: ["8080"] 
+    ports:
+      - "8080:8080/udp"
+    networks:
+      - flight-net
+
+  # ==========================================
+  # --- AIRCRAFT 1 ---
+  # ==========================================
+  
+  # 1. The Network Holder (Bulletproof IP container)
+  ac1-network:
+    image: alpine:latest
+    command: ["sleep", "infinity"] # Does nothing but keep the container alive
+    networks:
+      - flight-net
+
+  # 2. The Sensors (Both attach to the Network Holder)
+  anemo-ac1:
+    build:
+      context: .
+      dockerfile: Dockerfile.anemo
+    command: ["server", "8080"] 
+    network_mode: "service:ac1-network"
+    depends_on:
+      - server
+      - ac1-network
+
+  fuel-ac1:
+    build:
+      context: .
+      dockerfile: Dockerfile.fuel
+    command: ["server", "8080"]
+    network_mode: "service:ac1-network"
+    depends_on:
+      - server
+      - ac1-network
+
+  # ==========================================
+  # --- AIRCRAFT 2 ---
+  # ==========================================
+  
+  ac2-network:
+    image: alpine:latest
+    command: ["sleep", "infinity"]
+    networks:
+      - flight-net
+
+  anemo-ac2:
+    build:
+      context: .
+      dockerfile: Dockerfile.anemo
+    command: ["server", "8080"]
+    network_mode: "service:ac2-network"
+    depends_on:
+      - server
+      - ac2-network
+
+  fuel-ac2:
+    build:
+      context: .
+      dockerfile: Dockerfile.fuel
+    command: ["server", "8080"]
+    network_mode: "service:ac2-network"
+    depends_on:
+      - server
+      - ac2-network
+
+networks:
+  flight-net:
+    driver: bridge
