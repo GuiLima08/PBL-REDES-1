@@ -14,20 +14,20 @@ import (
 )
 
 var (
-	tcpConn    net.Conn
-	scanner    *bufio.Scanner
-	
-	// App State
-	sensorList   []string
-	actorList    []string
-	latestData   string
-	actorState   string // Holds the fetched state of the current actor
+	tcpConn net.Conn
+	scanner *bufio.Scanner
 
-	listLock     sync.RWMutex
-	dataLock     sync.RWMutex
-	dataTypes	 = map[string][2]string{
-		"ANEMO": {"Anemômetro", "Km/h"},
-		"FUEL":  {"Combustível", "L"},
+	// App State
+	sensorList []string
+	actorList  []string
+	latestData string
+	actorState string // Holds the fetched state of the current actor
+
+	listLock  sync.RWMutex
+	dataLock  sync.RWMutex
+	dataTypes = map[byte][2]string{
+		'A': {"Anemômetro", "Km/h"},
+		'F': {"Combustível", "L"},
 	}
 )
 
@@ -93,7 +93,7 @@ func main() {
 // --- BACKGROUND NETWORK LISTENER ---
 func readLoop() {
 	netScanner := bufio.NewScanner(tcpConn)
-	
+
 	for netScanner.Scan() {
 		msg := strings.TrimSpace(netScanner.Text())
 
@@ -129,7 +129,7 @@ func readLoop() {
 			}
 		}
 	}
-	
+
 	fmt.Println("\n-!- Desconectado do servidor.")
 	os.Exit(1)
 }
@@ -231,7 +231,7 @@ func showActorMenu() string {
 // --- SCREEN 2A: SENSOR LIVE STREAM ---
 func streamData(sensorID string) {
 	tcpConn.Write([]byte("USER/GET/" + sensorID + "\n"))
-	
+
 	dataLock.Lock()
 	latestData = "CONECTANDO..."
 	dataLock.Unlock()
@@ -242,6 +242,8 @@ func streamData(sensorID string) {
 		stopChan <- true
 	}()
 
+	senType := dataTypes[sensorID[len(sensorID)-1]]
+
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -249,7 +251,7 @@ func streamData(sensorID string) {
 		select {
 		case <-stopChan:
 			tcpConn.Write([]byte("USER/DCN/--\n"))
-			return 
+			return
 
 		case <-ticker.C:
 			dataLock.RLock()
@@ -258,12 +260,12 @@ func streamData(sensorID string) {
 
 			clearScreen()
 			fmt.Println("======================================")
-			fmt.Printf("SENSOR: \"%s\" (%s)\n", sensorID, dataTypes[sensorID][0])
+			fmt.Printf("SENSOR: \"%s\" (%s)\n", sensorID, senType[0])
 			fmt.Println("======================================")
-			
+
 			parts := strings.Split(data, "/")
 			if len(parts) == 2 {
-				fmt.Printf("    %s%s\n", parts[1], dataTypes[sensorID][1])
+				fmt.Printf("    %s %s\n", parts[1], senType[1])
 			} else {
 				fmt.Printf("\n    %s\n", data)
 			}
@@ -278,16 +280,16 @@ func streamData(sensorID string) {
 func actorControl(actorID string) {
 	for {
 		tcpConn.Write([]byte("USER/CKS/" + actorID + "\n"))
-		time.Sleep(200 * time.Millisecond) 
+		time.Sleep(200 * time.Millisecond)
 
 		clearScreen()
 		fmt.Println("======================================")
 		fmt.Printf(" ATUADOR: %s\n", actorID)
-		
+
 		dataLock.RLock()
 		st := actorState
 		dataLock.RUnlock()
-		
+
 		fmt.Printf(" ESTADO ATUAL: %s\n", st)
 		fmt.Println("======================================")
 		fmt.Println(" [1] Ligar (ON)")
@@ -302,7 +304,7 @@ func actorControl(actorID string) {
 
 		if input == "1" {
 			tcpConn.Write([]byte("USER/SST/" + actorID + "|ON\n"))
-			time.Sleep(200 * time.Millisecond) 
+			time.Sleep(200 * time.Millisecond)
 		} else if input == "2" {
 			tcpConn.Write([]byte("USER/SST/" + actorID + "|OFF\n"))
 			time.Sleep(200 * time.Millisecond)
@@ -314,7 +316,7 @@ func actorControl(actorID string) {
 
 func handshake() bool {
 	tcpConn.Write([]byte("USER/HND/--\n"))
-	
+
 	netScanner := bufio.NewScanner(tcpConn)
 	if netScanner.Scan() {
 		msg := strings.TrimSpace(netScanner.Text())
@@ -325,7 +327,7 @@ func handshake() bool {
 		fmt.Println("-!- Handshake bem-sucedido!")
 		return true
 	}
-	
+
 	fmt.Println("-!- Erro durante o handshake: servidor fechou a conexão.")
 	return false
 }
