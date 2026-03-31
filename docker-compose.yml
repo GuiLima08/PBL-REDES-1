@@ -1,30 +1,26 @@
 version: '3.8'
 
 services:
-  # --- CENTRAL SERVER ---
   server:
     build: 
       context: .
       dockerfile: Dockerfile.server
     command: ["8080"] 
     ports:
-      - "8080:8080/tcp" # Libera o TCP para o seu user.go se conectar de fora
-      - "8080:8080/udp" # Libera o UDP
+      - "8080:8080/tcp" 
+      - "8080:8080/udp" 
     networks:
       - flight-net
 
   # ==========================================
   # --- AIRCRAFT 1 ---
   # ==========================================
-  
-  # 1. The Network Holder (Bulletproof IP container)
   ac1-network:
     image: alpine:latest
-    command: ["sleep", "infinity"] # Does nothing but keep the container alive
+    command: ["sleep", "infinity"] 
     networks:
       - flight-net
 
-  # 2. Sensores e Atuadores (Todos anexados ao Network Holder)
   anemo-ac1:
     build:
       context: .
@@ -55,10 +51,22 @@ services:
       - server
       - ac1-network
 
+  # --- NOVO: PILOTO DA AERONAVE 1 ---
+  user-ac1:
+    build:
+      context: .
+      dockerfile: Dockerfile.user
+    command: ["server", "8080"]
+    network_mode: "service:ac1-network"
+    stdin_open: true # Mantém o canal do teclado aberto
+    tty: true        # Simula uma tela de terminal real
+    depends_on:
+      - server
+      - ac1-network
+
   # ==========================================
   # --- AIRCRAFT 2 ---
   # ==========================================
-  
   ac2-network:
     image: alpine:latest
     command: ["sleep", "infinity"]
@@ -91,6 +99,19 @@ services:
       dockerfile: Dockerfile.siren
     command: ["server", "8080"]
     network_mode: "service:ac2-network"
+    depends_on:
+      - server
+      - ac2-network
+
+  # --- NOVO: PILOTO DA AERONAVE 2 ---
+  user-ac2:
+    build:
+      context: .
+      dockerfile: Dockerfile.user
+    command: ["server", "8080"]
+    network_mode: "service:ac2-network"
+    stdin_open: true 
+    tty: true        
     depends_on:
       - server
       - ac2-network

@@ -1,0 +1,12 @@
+FROM golang:1.20-alpine
+
+WORKDIR /app
+
+# Copia o código do usuário
+COPY user.go .
+
+# Compila o executável
+RUN go build -o userApp user.go
+
+# O Compose vai passar o IP ("server") e a porta ("8080")
+ENTRYPOINT ["./userApp"]
