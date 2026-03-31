@@ -19,35 +19,35 @@ type SensorData struct {
 }
 
 var (
-	Sensors     = make(map[string]SensorData)
-	Clients     = make(map[string]net.Conn)
-	Bridges     = make(map[string]string)
-	
+	Sensors = make(map[string]SensorData)
+	Clients = make(map[string]net.Conn)
+	Bridges = make(map[string]string)
+
 	Actors      = make(map[string]net.Conn)
 	ActorStates = make(map[string]string)
 	ALock       = sync.RWMutex{}
-	
-	Lock        = sync.RWMutex{}
-	TLock       = sync.RWMutex{} 
-	
+
+	Lock  = sync.RWMutex{}
+	TLock = sync.RWMutex{}
+
 	UDP_Types = map[string]string{
-		"ANEMO": "A", 
-		"FUEL":  "F", 
+		"ANEMO": "A",
+		"FUEL":  "F",
 	}
 	TCP_Types = []string{
 		"USER",
 		"ACTOR",
 	}
 	Cmd_Types = []string{
-		"HND", 
-		"BYE", 
-		"LST", 
-		"GET", 
-		"DCN", 
-		"LSA", 
-		"CKS", 
-		"SST", 
-		"FDB", 
+		"HND",
+		"BYE",
+		"LST",
+		"GET",
+		"DCN",
+		"LSA",
+		"CKS",
+		"SST",
+		"FDB",
 	}
 )
 
@@ -111,7 +111,7 @@ func handleUDP(port string) {
 		go func(sender *net.UDPAddr, b []byte) {
 			msg := strings.TrimSpace(string(b))
 			parts := strings.Split(msg, "/")
-			senderIp := sender.IP.String()
+			senderIp := sender.String()
 
 			if len(parts) != 2 {
 				output(fmt.Sprintf("-!- Invalid message format from %s: %s", senderIp, msg))
@@ -188,7 +188,7 @@ func handleTCP(port string) {
 func handleClient(conn net.Conn) {
 	defer func() {
 		output(fmt.Sprintf("TCP client from %s disconnected", conn.RemoteAddr()))
-		
+
 		ALock.Lock()
 		delete(Actors, conn.RemoteAddr().String())
 		delete(ActorStates, conn.RemoteAddr().String())
@@ -202,10 +202,10 @@ func handleClient(conn net.Conn) {
 		conn.Close()
 	}()
 	go sensorBridge(conn)
-	
+
 	// --- MÁGICA DO SCANNER AQUI ---
 	scanner := bufio.NewScanner(conn)
-	
+
 	for scanner.Scan() {
 		msg := strings.TrimSpace(scanner.Text())
 		parts := strings.Split(msg, "/")
@@ -321,7 +321,7 @@ func handleUser(conn net.Conn, cmdType, content string) {
 			conn.Write([]byte(fmt.Sprintf("ERR/Actor \"%s\" not found\n", actorId)))
 			return
 		}
-		
+
 		actorConn.Write([]byte("FEEDBACK\n"))
 		conn.Write([]byte(fmt.Sprintf("CKS/%s/%s\n", actorId, state)))
 		break
@@ -355,14 +355,14 @@ func handleActor(conn net.Conn, cmdType, content string) {
 	switch cmdType {
 	case "HND":
 		output(fmt.Sprintf("Handshake received from %s (ACTOR)", conn.RemoteAddr()))
-		
+
 		ALock.Lock()
 		Actors[conn.RemoteAddr().String()] = conn
 		ActorStates[conn.RemoteAddr().String()] = "UNKNOWN"
 		ALock.Unlock()
-		
+
 		conn.Write([]byte("HND/ACCEPTED\n"))
-		
+
 		time.Sleep(100 * time.Millisecond)
 		conn.Write([]byte("FEEDBACK\n"))
 
