@@ -368,9 +368,14 @@ func handleActor(conn net.Conn, cmdType, content string) {
 
 	case "FDB":
 		ALock.Lock()
-		ActorStates[conn.RemoteAddr().String()] = content
+		oldState := ActorStates[conn.RemoteAddr().String()] // Salva o estado antigo
+		ActorStates[conn.RemoteAddr().String()] = content   // Atualiza pro novo
 		ALock.Unlock()
-		output(fmt.Sprintf("Actor %s updated state to: %s", conn.RemoteAddr(), content))
+
+		// Só imprime no terminal se houve uma mudança real!
+		if oldState != content {
+			output(fmt.Sprintf("Actor %s updated state to: %s", conn.RemoteAddr(), content))
+		}
 
 	default:
 		output(fmt.Sprintf("-!- Unhandled command type from %s (ACTOR): %s", conn.RemoteAddr(), cmdType))
