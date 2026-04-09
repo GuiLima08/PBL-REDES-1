@@ -63,18 +63,27 @@ A rede utiliza dois protocolos distintos dependendo da natureza do componente:
 
 ## Como Utilizar (Guia de Execução)
 
-Este guia assume um cenário de rede distribuída: o **Servidor** será executado em uma máquina central (Máquina A), enquanto os **Sensores, Atuadores e Usuários** serão executados em uma ou mais máquinas clientes (Máquina B, C, etc.).
+Você pode executar este projeto baixando as imagens prontas da nuvem ou compilando tudo localmente na sua máquina.
 
-### 1. Download das Imagens (Pull)
-Em todas as máquinas que forem executar qualquer parte do sistema, você deve baixar as imagens pré-compiladas diretamente do Docker Hub. No terminal, execute:
+### Opção 1: Compilação Local (Sem Docker Hub)
+Se desejar compilar o código fonte do zero, abra o terminal na raiz do projeto e execute os builds apontando para os respectivos diretórios:
 
-```bash
-docker pull bdaemonis/aircraft-server:latest
-docker pull bdaemonis/aircraft-anemo:latest
-docker pull bdaemonis/aircraft-fuel:latest
-docker pull bdaemonis/aircraft-siren:latest
-docker pull bdaemonis/aircraft-user:latest
-```
+    docker build -t bdaemonis/aircraft-server:latest -f Server/Dockerfile.server Server/
+    docker build -t bdaemonis/aircraft-user:latest -f User/Dockerfile.user User/
+    docker build -t bdaemonis/aircraft-anemo:latest -f SensorA/Dockerfile.anemo SensorA/
+    docker build -t bdaemonis/aircraft-fuel:latest -f SensorF/Dockerfile.fuel SensorF/
+    docker build -t bdaemonis/aircraft-siren:latest -f Actors/Dockerfile.siren Actors/
+
+### Opção 2: Download do Docker Hub
+Se preferir não compilar localmente, você pode baixar as imagens pré-compiladas diretamente do repositório público:
+
+    docker pull bdaemonis/aircraft-server:latest
+    docker pull bdaemonis/aircraft-anemo:latest
+    docker pull bdaemonis/aircraft-fuel:latest
+    docker pull bdaemonis/aircraft-siren:latest
+    docker pull bdaemonis/aircraft-user:latest
+
+---
 
 ### 2. Iniciando o Servidor (Máquina A)
 O Servidor deve ser o primeiro componente a ser iniciado. Ele utilizará a mesma porta tanto para o tráfego TCP quanto UDP. Substitua `<port>` pela porta desejada (ex: 8080).
