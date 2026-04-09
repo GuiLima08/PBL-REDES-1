@@ -14,24 +14,24 @@ import (
 )
 
 var (
-	tcpConn net.Conn       // Conexão TCP com o servidor, usada para enviar comandos e receber atualizações de sensores e atuadores
-	scanner *bufio.Scanner // Scanner para ler a entrada do usuário a partir do terminal
+	tcpConn net.Conn
+	scanner *bufio.Scanner
 
 	sensorList []string // Lista de sensores disponíveis, atualizada a partir das mensagens recebidas do servidor
 	actorList  []string // Lista de atuadores disponíveis, atualizada a partir das mensagens recebidas do servidor
-	latestData string   // Armazena o dado mais recente recebido do servidor para o sensor atualmente monitorado
-	actorState string   // Armazena o estado atual do atuador que está sendo controlado
+	latestData string // Armazena o dado mais recente recebido do servidor para o sensor atualmente monitorado
+	actorState string // Armazena o estado atual do atuador que está sendo controlado
 
-	listLock  sync.RWMutex          // Mutex para proteger o acesso às listas de sensores e atuadores
-	dataLock  sync.RWMutex          // Mutex para proteger o acesso às variáveis de dados mais recentes e estado do atuador
-	dataTypes = map[byte][2]string{ // Mapa para traduzir os tipos de sensores recebidos via UDP para um formato mais legível
-		'A': {"Anemômetro", "Km/h"}, // Anemômetro
-		'F': {"Combustível", "L"},   // Combustível
+	listLock  sync.RWMutex // Mutex para proteger o acesso às listas de sensores e atuadores
+	dataLock  sync.RWMutex // Mutex para proteger o acesso às variáveis de dados mais recentes e estado do atuador
+	dataTypes = map[byte][2]string{ // Mapa para traduzir os tipos de sensores
+		'A': {"Anemômetro", "Km/h"},
+		'F': {"Combustível", "L"},
 	}
 )
 
 func main() {
-	if len(os.Args) != 3 { // Verifica se os argumentos necessários foram fornecidos (IP do servidor e porta)
+	if len(os.Args) != 3 {
 		fmt.Println("Uso: go run user.go <server_ip> <port>")
 		return
 	}
@@ -56,7 +56,6 @@ func main() {
 	// Inicializa o scanner para ler a entrada do usuário a partir do terminal
 	scanner = bufio.NewScanner(os.Stdin)
 
-	// Loop principal do menu
 	for {
 		clearScreen()
 		fmt.Println("======================================")
@@ -70,17 +69,17 @@ func main() {
 		scanner.Scan()
 		input := strings.TrimSpace(strings.ToUpper(scanner.Text()))
 
-		if input == "1" { // Exibe a lista de sensores disponíveis e permite que o usuário selecione um para monitorar em tempo real
+		if input == "1" {
 			sensorID := showSensorMenu()
 			if sensorID != "" {
 				streamData(sensorID)
 			}
-		} else if input == "2" { // Exibe a lista de atuadores disponíveis e permite que o usuário selecione um para controlar
+		} else if input == "2" {
 			actorID := showActorMenu()
 			if actorID != "" {
 				actorControl(actorID)
 			}
-		} else if input == "Q" { // Envia uma mensagem de desconexão para o servidor, limpa a tela e encerra o programa
+		} else if input == "Q" {
 			tcpConn.Write([]byte("USER/BYE/--\n"))
 			clearScreen()
 			fmt.Println("Desconectado. Adeus!")
@@ -92,31 +91,31 @@ func main() {
 func readLoop() { // Função que fica em loop lendo mensagens do servidor e respondendo de acordo com o comando recebido
 	netScanner := bufio.NewScanner(tcpConn)
 
-	for netScanner.Scan() { // Para cada linha de texto recebida do servidor, processa a mensagem de acordo com seu tipo
+	for netScanner.Scan() {
 		msg := strings.TrimSpace(netScanner.Text())
 		parts := strings.Split(msg, "/")
 		switch parts[0] {
 		case "LST": // Atualiza a lista de sensores disponíveis com base na mensagem recebida do servidor
 			listLock.Lock()
-			if msg == "LST/" { // Se a mensagem for "LST/" sem sensores listados, limpa a lista de sensores
+			if msg == "LST/" {
 				sensorList = []string{}
-			} else { // Caso contrário, extrai os IDs dos sensores da mensagem e atualiza a lista de sensores disponíveis
+			} else {
 				sensorList = strings.Split(strings.TrimPrefix(msg, "LST/"), ",")
 			}
 			listLock.Unlock()
 
 		case "LSA": // Atualiza a lista de atuadores disponíveis com base na mensagem recebida do servidor
 			listLock.Lock()
-			if msg == "LSA/" { // Se a mensagem for "LSA/" sem atuadores listados, limpa a lista de atuadores
+			if msg == "LSA/" {
 				actorList = []string{}
-			} else { // Caso contrário, extrai os IDs dos atuadores da mensagem e atualiza a lista de atuadores disponíveis
+			} else {
 				actorList = strings.Split(strings.TrimPrefix(msg, "LSA/"), ",")
 			}
 			listLock.Unlock()
 
 		case "DATA": // Atualiza o dado mais recente recebido do servidor para o sensor atualmente monitorado
 			dataLock.Lock()
-			latestData = strings.TrimPrefix(msg, "DATA/") // Armazena o dado mais recente recebido do servidor para o sensor atualmente monitorado
+			latestData = strings.TrimPrefix(msg, "DATA/")
 			dataLock.Unlock()
 
 		case "CKS": // Atualiza o estado do atuador com base na mensagem recebida do servidor
@@ -149,9 +148,9 @@ func showSensorMenu() string { // Exibe a lista de sensores disponíveis e permi
 		copy(sensors, sensorList)
 		listLock.RUnlock()
 
-		if len(sensors) == 0 { // Se não houver sensores disponíveis, exibe uma mensagem informando que nenhum sensor foi encontrado
+		if len(sensors) == 0 {
 			fmt.Println("\n Nenhum sensor encontrado.")
-		} else { // Caso contrário, exibe a lista de sensores disponíveis para o usuário escolher
+		} else {
 			fmt.Println("\n SENSORES DISPONÍVEIS:")
 			for i, s := range sensors {
 				fmt.Printf("  [%d] %s\n", i+1, s)
@@ -166,15 +165,15 @@ func showSensorMenu() string { // Exibe a lista de sensores disponíveis e permi
 		scanner.Scan()
 		input := strings.TrimSpace(strings.ToUpper(scanner.Text()))
 
-		if input == "B" { //Retorna uma string vazia para indicar que o usuário deseja voltar ao menu principal
+		if input == "B" {
 			return ""
 		}
-		if input == "R" || input == "" { // O loop continua e a lista de sensores é atualizada novamente
+		if input == "R" || input == "" {
 			continue
 		}
 
-		choice, err := strconv.Atoi(input)                      // Tenta converter a entrada do usuário para um número inteiro, representando a escolha do sensor
-		if err == nil && choice > 0 && choice <= len(sensors) { // Se a conversão for bem-sucedida e a escolha for válida, retorna o ID do sensor selecionado pelo usuário para monitoramento
+		choice, err := strconv.Atoi(input)
+		if err == nil && choice > 0 && choice <= len(sensors) {
 			return sensors[choice-1]
 		}
 	}
@@ -195,9 +194,9 @@ func showActorMenu() string { // Exibe a lista de atuadores disponíveis e permi
 		copy(actors, actorList)
 		listLock.RUnlock()
 
-		if len(actors) == 0 { // Se não houver atuadores disponíveis, exibe uma mensagem informando que nenhum atuador foi encontrado
+		if len(actors) == 0 {
 			fmt.Println("\n Nenhum atuador encontrado.")
-		} else { // Caso contrário, exibe a lista de atuadores disponíveis para o usuário escolher
+		} else {
 			fmt.Println("\n ATUADORES DISPONÍVEIS:")
 			for i, a := range actors {
 				fmt.Printf("  [%d] %s\n", i+1, a)
@@ -212,15 +211,15 @@ func showActorMenu() string { // Exibe a lista de atuadores disponíveis e permi
 		scanner.Scan()
 		input := strings.TrimSpace(strings.ToUpper(scanner.Text()))
 
-		if input == "B" { // Retorna uma string vazia para indicar que o usuário deseja voltar ao menu principal
+		if input == "B" {
 			return ""
 		}
-		if input == "R" || input == "" { // O loop continua e a lista de atuadores é atualizada novamente
+		if input == "R" || input == "" {
 			continue
 		}
 
-		choice, err := strconv.Atoi(input)                     // Tenta converter a entrada do usuário para um número inteiro, representando a escolha do atuador
-		if err == nil && choice > 0 && choice <= len(actors) { // Se a conversão for bem-sucedida e a escolha for válida, retorna o ID do atuador selecionado pelo usuário para controle
+		choice, err := strconv.Atoi(input)
+		if err == nil && choice > 0 && choice <= len(actors) {
 			return actors[choice-1]
 		}
 	}
@@ -233,8 +232,8 @@ func streamData(sensorID string) { // Envia uma mensagem para o servidor solicit
 	latestData = "CONECTANDO..."
 	dataLock.Unlock()
 
-	stopChan := make(chan bool) // Canal para sinalizar quando o usuário deseja parar o monitoramento do sensor e voltar ao menu principal
-	go func() {                 // Goroutine para aguardar a entrada do usuário para parar o monitoramento do sensor
+	stopChan := make(chan bool)
+	go func() {
 		scanner.Scan()
 		stopChan <- true
 	}()

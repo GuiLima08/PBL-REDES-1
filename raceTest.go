@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	if len(os.Args) != 4 { // Verifica se os argumentos necessários foram fornecidos (IP do servidor, porta e ID do ator)
+	if len(os.Args) != 4 {
 		fmt.Println("Uso: go run racetest.go <server_ip> <port> <ator_id>")
 		fmt.Println("Ex: go run racetest.go 127.0.0.1 8080 127.0.0.1:59000")
 		return
@@ -20,16 +20,16 @@ func main() {
 	var wg sync.WaitGroup // WaitGroup para aguardar a conclusão de todas as goroutines dos clientes antes de finalizar o programa
 	var startingGun sync.WaitGroup // WaitGroup para sincronizar o início simultâneo de todas as goroutines dos clientes, garantindo que todos enviem seus comandos ao mesmo tempo para criar uma situação de corrida no servidor
 
-	numClients := 10
+	numClients := 100
 	
-	wg.Add(numClients) // Adiciona o número de clientes ao WaitGroup para aguardar a conclusão de todas as goroutines dos clientes
+	wg.Add(numClients)
 	startingGun.Add(1)
 
 	fmt.Printf("Conectando %d clientes ao servidor...\n", numClients)
 
 	for i := 0; i < numClients; i++ { // Para cada cliente, inicia uma goroutine que se conecta ao servidor
 		go func(clientID int) {
-			defer wg.Done() // Garante que o WaitGroup seja sinalizado como concluído quando a goroutine terminar
+			defer wg.Done()
 
 			conn, err := net.Dial("tcp", serverIP+":"+port)
 			if err != nil {
@@ -47,7 +47,7 @@ func main() {
 				comando = "ON"
 			}
 
-			msg := fmt.Sprintf("USER/SST/%s|%s\n", actorID, comando) // Formata a mensagem de comando de acordo com o protocolo definido, incluindo o ID do ator e o comando a ser enviado
+			msg := fmt.Sprintf("USER/SST/%s|%s\n", actorID, comando) 
 
 			startingGun.Wait() // Aguarda o sinal do startingGun para garantir que todas as goroutines dos clientes enviem seus comandos ao mesmo tempo, criando uma situação de corrida no servidor
 
@@ -62,6 +62,6 @@ func main() {
 	fmt.Println("\n3... 2... 1... FOGO!")
 	startingGun.Done() // Sinaliza o startingGun para permitir que todas as goroutines dos clientes enviem seus comandos ao mesmo tempo, criando uma situação de corrida no servidor
 
-	wg.Wait() // Aguarda a conclusão de todas as goroutines dos clientes antes de finalizar o programa
+	wg.Wait()
 	fmt.Println("\nTeste de estresse concluído! Verifique o log do Servidor e do Atuador.")
 }
