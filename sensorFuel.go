@@ -43,7 +43,7 @@ func main() {
 		_, err := conn.Write([]byte(msg))
 		if err != nil {
 			fmt.Println("Error sending data, dropping packet:", err)
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(1 * time.Millisecond)
 			continue 
 		}
 		

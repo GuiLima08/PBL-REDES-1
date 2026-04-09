@@ -66,7 +66,7 @@ func main() {
 			cnt = 0
 			speed = float64(rnd.Intn(3)+1) * 0.01
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(1 * time.Millisecond)
 	}
 }
 
