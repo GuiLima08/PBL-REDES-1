@@ -13,6 +13,43 @@ O sistema é composto por quatro módulos principais, cada um empacotado em sua 
 
 ---
 
+### Detalhamento dos Pacotes e Bibliotecas
+
+O repositório foi organizado na seguinte estrutura, onde cada componente atua como um microsserviço independente.
+
+    .
+    ├── README.md
+    ├── raceTest.go              # Código de teste de concorrência
+    ├── Server/
+    |     ├── server.go          # Código-fonte do Broker/Servidor Central
+    |     └── Dockerfile.server  # Build stage do servidor
+    ├── User/
+    |     ├── user.go            # Código-fonte da Aplicação Cliente (Painel TUI)
+    |     └── Dockerfile.user    # Build stage do painel do usuário
+    ├── SensorA
+    |     ├── sensorAnemo.go     # Código-fonte do Sensor (Anemômetro)
+    |     └── Dockerfile.anemo   # Build stage do anemômetro
+    ├── SensorF
+    |     ├── sensorFuel.go      # Código-fonte do Sensor (Combustível)
+    |     └── Dockerfile.fuel    # Build stage do combustível
+    └── Actors
+          ├── actorSiren.go      # Código-fonte do Atuador (Sirene)
+          └── Dockerfile.siren   # Build stage da sirene
+
+* **Pacotes Go (`package main`):** Devido à natureza distribuída do sistema, todos os arquivos `.go` operam no pacote `main`. A separação por diretórios garante que cada componente seja compilado de forma totalmente isolada para gerar seu próprio executável binário autossuficiente.* **Bibliotecas Utilizadas:** Respeitando as restrições arquiteturais do problema, o sistema não utiliza nenhum framework externo de mensageria (como RabbitMQ ou MQTT). Toda a base de código é suportada exclusivamente pela **Standard Library do Go**:
+    * `net`: Construção e manipulação dos *Sockets* TCP e UDP.
+    * `sync`: Implementação de concorrência segura com `RWMutex` para evitar *Race Conditions* na memória do servidor.
+    * `bufio` e `strings`: *Parsing* e varredura de pacotes I/O trafegados na rede.
+    * `time`: Controle de *Tickers* para QoS (Qualidade de Serviço) e *Timeouts* de conexão.
+    * `os/exec` e `runtime`: Compatibilidade *cross-platform* (Linux/Windows) para renderização limpa do terminal do usuário.
+
+### Configurações de Ambiente (Docker)
+A instalação de dependências e a configuração do ambiente são automatizadas pelos `Dockerfiles`. Eles utilizam a técnica de **Multi-stage Build**:
+1. **Estágio Builder (`golang:1.22-alpine`):** Baixa o ambiente Go, compila o código-fonte em um binário estático.
+2. **Estágio Final (`alpine:latest`):** Descarta os compiladores e carrega apenas o executável em um contêiner minimalista de poucos megabytes, configurando o `ENTRYPOINT` para execução imediata no momento do `docker run`.
+
+---
+
 ## Fluxo de Dados e Comunicação
 
 A rede utiliza dois protocolos distintos dependendo da natureza do componente:
