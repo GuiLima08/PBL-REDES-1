@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	if len(os.Args) != 3 {
+	if len(os.Args) != 3 { // Verifica se os argumentos necessários foram fornecidos (IP do servidor e porta)
 		fmt.Println("Usage: go run sensorFuel.go <server_ip> <port>")
 		return
 	}
@@ -19,7 +19,7 @@ func main() {
 
 	fmt.Printf("Connecting to %s:%s...\n", serverIP, port)
 	
-	for {
+	for { // Tenta se conectar ao servidor em um loop, caso haja falha na conexão, espera 2 segundos antes de tentar novamente
 		conn, err = net.Dial("udp", serverIP+":"+port)
 		if err != nil {
 			fmt.Printf("Connection failed (%v). Retrying in 2 seconds...\n", err)
@@ -31,9 +31,9 @@ func main() {
 	defer conn.Close()
 	fmt.Println("Successfully connected!")
 
-	fuel := 100.0000
+	fuel := 100.0000 // Inicializa o nível de combustível com um valor alto para simular o consumo ao longo do tempo
 	
-	for {
+	for { // Em um loop infinito, simula o consumo de combustível e envia os dados para o servidor a cada 100 milissegundos
 		fuel -= (fuel * 0.0001)
 		if fuel < 1 {
 			fuel = 1
@@ -47,6 +47,6 @@ func main() {
 			continue 
 		}
 		
-		time.Sleep(100 * time.Millisecond) // Send data every 0.1 seconds
+		time.Sleep(100 * time.Millisecond)
 	}
 }
