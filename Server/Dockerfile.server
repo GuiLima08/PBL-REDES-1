@@ -1,0 +1,12 @@
+# Stage 1: Build the executable
+FROM golang:1.22-alpine AS builder
+WORKDIR /app
+COPY server.go .
+RUN go build -o server server.go
+
+# Stage 2: Create a minimal final image
+FROM alpine:latest
+WORKDIR /root/
+COPY --from=builder /app/server .
+# Server requires a port argument to run
+ENTRYPOINT ["./server"]
