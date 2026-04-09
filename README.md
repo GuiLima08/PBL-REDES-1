@@ -26,13 +26,13 @@ O repositório foi organizado na seguinte estrutura, onde cada componente atua c
     ├── User/
     |     ├── user.go            # Código-fonte da Aplicação Cliente (Painel TUI)
     |     └── Dockerfile.user    # Build stage do painel do usuário
-    ├── SensorA
+    ├── SensorA/
     |     ├── sensorAnemo.go     # Código-fonte do Sensor (Anemômetro)
     |     └── Dockerfile.anemo   # Build stage do anemômetro
-    ├── SensorF
+    ├── SensorF/
     |     ├── sensorFuel.go      # Código-fonte do Sensor (Combustível)
     |     └── Dockerfile.fuel    # Build stage do combustível
-    └── Actors
+    └── Actors/
           ├── actorSiren.go      # Código-fonte do Atuador (Sirene)
           └── Dockerfile.siren   # Build stage da sirene
 
