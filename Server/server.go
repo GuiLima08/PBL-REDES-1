@@ -25,10 +25,10 @@ var (
 
 	Actors      = make(map[string]net.Conn) // Mapa para armazenar os atuadores TCP conectados, onde a chave é o endereço do atuador e o valor é a conexão TCP correspondente
 	ActorStates = make(map[string]string)   // Mapa para armazenar o estado atual de cada atuador, onde a chave é o endereço do atuador e o valor é o estado atual (ex: "ON", "OFF", "UNKNOWN")
-	ALock       = sync.RWMutex{}            // Mutex para proteger o acesso aos mapas de atuadores e seus estados
-
-	Lock  = sync.RWMutex{} // Mutex para proteger o acesso ao mapa de sensores
-	TLock = sync.RWMutex{} // Mutex para proteger o acesso aos mapas de clientes e bridges
+	
+	ALock = sync.RWMutex{}  // Mutex para proteger o acesso aos mapas de atuadores e seus estados
+	Lock  = sync.RWMutex{} 	// Mutex para proteger o acesso ao mapa de sensores
+	TLock = sync.RWMutex{} 	// Mutex para proteger o acesso aos mapas de clientes e bridges
 
 	UDP_Types = map[string]string{ // Mapa para traduzir os tipos de sensores recebidos via UDP para uma abreviação
 		"ANEMO": "A", //Anemômetro
@@ -63,7 +63,7 @@ func main() {
 	go handleUDP(port) // Inicia o servidor UDP para receber dados dos sensores
 	go listenTCP(port) // Inicia o servidor TCP para lidar com conexões de usuários e atuadores
 
-	for { // Loop principal para monitorar sensores e imprimir status a cada 5 segundos
+	for { // Loop principal para monitorar sensores e imprimir status a cada segundo
 		time.Sleep(1 * time.Second)
 
 		Lock.RLock()
