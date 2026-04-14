@@ -27,7 +27,7 @@ var (
 	ActorStates = make(map[string]string)   // Mapa para armazenar o estado atual de cada atuador, onde a chave é o endereço do atuador e o valor é o estado atual (ex: "ON", "OFF", "UNKNOWN")
 	
 	ALock = sync.RWMutex{}  // Mutex para proteger o acesso aos mapas de atuadores e seus estados
-	Lock  = sync.RWMutex{} 	// Mutex para proteger o acesso ao mapa de sensores
+	SLock  = sync.RWMutex{} 	// Mutex para proteger o acesso ao mapa de sensores
 	TLock = sync.RWMutex{} 	// Mutex para proteger o acesso aos mapas de clientes e bridges
 
 	UDP_Types = map[string]string{ // Mapa para traduzir os tipos de sensores recebidos via UDP para uma abreviação
@@ -63,18 +63,18 @@ func main() {
 	go handleUDP(port) // Inicia o servidor UDP para receber dados dos sensores
 	go listenTCP(port) // Inicia o servidor TCP para lidar com conexões de usuários e atuadores
 
-	for { // Loop principal para monitorar sensores e imprimir status a cada segundo
+	for { // Loop principal para monitorar sensores e imprimir status
 		time.Sleep(1 * time.Second)
 
-		Lock.RLock()
+		SLock.RLock()
 		if len(Sensors) == 0 {
-			Lock.RUnlock()
+			SLock.RUnlock()
 			continue
 		}
 		for id, data := range Sensors {
 			output(fmt.Sprintf("\"%s\": [%s] %.2f (%s)", id, data.Type, data.Value, data.Received.Format("15:04:05")))
 		}
-		Lock.RUnlock()
+		SLock.RUnlock()
 	}
 }
 
@@ -132,7 +132,7 @@ func handleUDP(port string) { // Inicia o servidor UDP para receber dados dos se
 
 			deviceId := fmt.Sprintf("%s-%s", senderIp, UDP_Types[sensorType]) // Gera um ID único para o sensor baseado no IP e tipo
 
-			Lock.Lock()
+			SLock.Lock()
 			if _, exists := Sensors[deviceId]; !exists { // Novo sensor, imprime mensagem de conexão
 				output(fmt.Sprintf("Sensor \"%s\" (%s) CONNECTED", deviceId, sensorType))
 			}
@@ -143,7 +143,7 @@ func handleUDP(port string) { // Inicia o servidor UDP para receber dados dos se
 				Received: time.Now(),
 				Type:     sensorType,
 			}
-			Lock.Unlock()
+			SLock.Unlock()
 
 		}(addr, packetData)
 	}
@@ -152,14 +152,14 @@ func handleUDP(port string) { // Inicia o servidor UDP para receber dados dos se
 func heartbeatUDP() { // Loop para monitorar o status dos sensores a cada 5 segundos e remover os que estão inativos
 	for {
 		time.Sleep(5 * time.Second)
-		Lock.Lock()
+		SLock.Lock()
 		for id, data := range Sensors {
 			if time.Since(data.Received) > 5*time.Second { // Se o sensor não enviar dados por mais de 5 segundos, considera desconectado
 				output(fmt.Sprintf("Sensor \"%s\" DISCONNECTED (last seen %.2f seconds ago)", id, time.Since(data.Received).Seconds()))
 				delete(Sensors, id)
 			}
 		}
-		Lock.Unlock()
+		SLock.Unlock()
 	}
 }
 
@@ -264,20 +264,20 @@ func handleUser(conn net.Conn, cmdType, content string) { // Lida com mensagens 
 		conn.Write([]byte("HND/ACCEPTED\n")) // Envia uma resposta de handshake aceito de volta para o cliente
 		
 	case "LST": // Requisição de lista de sensores disponíveis, responde com os IDs dos sensores atualmente registrados
-		Lock.RLock()
+		SLock.RLock()
 		var sensorList []string
 		for id := range Sensors {
 			sensorList = append(sensorList, id)
 		}
-		Lock.RUnlock()
+		SLock.RUnlock()
 		response := fmt.Sprintf("LST/%s\n", strings.Join(sensorList, ",")) // Formata a resposta com a lista de sensores separados por vírgula
 		conn.Write([]byte(response))
 		
 	case "GET": // Requisição para estabelecer um bridge com um sensor específico
 		output(fmt.Sprintf("Sensor connection requested by %s (USER) for sensor \"%s\"", conn.RemoteAddr(), content))
-		Lock.RLock()
+		SLock.RLock()
 		sensor, exists := Sensors[content]
-		Lock.RUnlock()
+		SLock.RUnlock()
 		if !exists { // Se o sensor solicitado não existir, envia um erro de volta para o cliente e imprime uma mensagem de aviso
 			conn.Write([]byte(fmt.Sprintf("ERR/Sensor \"%s\" not found\n", content)))
 			output(fmt.Sprintf("-!- Sensor \"%s\" requested by %s (USER) not found", content, conn.RemoteAddr()))
@@ -393,15 +393,15 @@ func sensorBridge(conn net.Conn) { // Continuamente envia dados do sensor para o
 		if !exists { // Se o cliente não tiver um bridge ativo, simplesmente continua esperando sem fazer nada
 			continue
 		}
-		Lock.RLock()
+		SLock.RLock()
 		sensor, exists := Sensors[sensorId]
 		if !exists { // Se o sensor associado ao bridge não existir mais, envia uma mensagem de erro para o cliente
 			response := "DATA/Sensor not found\n"
 			conn.Write([]byte(response))
-			Lock.RUnlock()
+			SLock.RUnlock()
 			continue
 		}
-		Lock.RUnlock()
+		SLock.RUnlock()
 
 		response := fmt.Sprintf("DATA/%s/%.2f\n", sensor.Type, sensor.Value)
 		_, err := conn.Write([]byte(response)) // Envia os dados do sensor para o cliente no formato "DATA/TYPE/VALUE"
